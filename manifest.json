@@ -1,0 +1,40 @@
+{
+  "Actions": [
+    {
+      "Icon": "0_replay",
+      "Name": "OBS Replay Button",
+      "States": [
+        {
+          "Image": "0_replay",
+          "TitleAlignment": "middle",
+          "FontSize": "13"
+        },
+        {
+          "Image": "1_replay",
+          "TitleAlignment": "middle",
+          "FontSize": "13"
+        }
+      ],
+      "SupportedInMultiActions": false,
+      "Tooltip": "",
+      "UUID": "sch.umann.it.obs.replay.action"
+    }
+  ],
+  "Author": "CuddlyCheetah",
+  "Category": "Cuddly Cheetah",
+
+  "CodePath": "index.html",
+  "PropertyInspectorPath": "pi.html",
+
+  "Icon": "pluginIcon",
+  "Description": "Control your OBS Replay",
+  "Name": "OBS Replay Button",
+  "URL": "https://sch.umann.it",
+  "Version": "1.0",
+  "OS": [
+    {
+      "Platform": "windows",
+      "MinimumVersion": "10"
+    }
+  ]
+}

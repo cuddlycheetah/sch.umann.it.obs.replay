@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <title>sch.umann.it.obs.replay PI</title>
+    <link rel="stylesheet" href="sdpi.css">
+    <script src="common.js"></script>
+</head>
+
+<body>
+    <div class="sdpi-wrapper">
+        <div class="sdpi-heading">made by CuddlyCheetah</div>
+    </div>
+
+    <script>
+        var pluginAction = null,
+            uuid = ''
+        if ($SD) {
+            $SD.on('connected', function (jsonObj) {
+                uuid = jsonObj['uuid'];
+                if (jsonObj.hasOwnProperty('actionInfo')) {
+                    pluginAction = jsonObj.actionInfo['action']
+                }
+                console.log(jsonObj)
+            })
+        }
+
+        /** you can also use ES6 syntax like so:
+        *
+        *   if ($SD) $SD.on('connected', (jsonObj) => { uuid=jsonObj.uuid }));
+        *    
+        */
+        var $SD_Settings = {}
+        function sendSettings() {
+            if ($SD && $SD.connection) {
+                $SD.api.sendToPlugin(uuid, pluginAction, $SD_Settings)
+            }
+        }
+        function sendValueToPlugin(value, param) {
+            if ($SD && $SD.connection) {
+                var payload = {};
+                if (param) {
+                    payload[param] = value;
+                }
+                $SD.api.sendToPlugin(uuid, pluginAction, payload);
+            }
+        }
+
+    </script>
+
+</body>
+
+</html>

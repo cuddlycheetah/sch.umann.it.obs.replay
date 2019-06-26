@@ -1,0 +1,250 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+	<title>sch.umann.it.obs.replay</title>
+	<meta charset="utf-8" />
+	<script type='text/javascript' src='obs-websocket.js'></script>
+</head>
+
+<body>
+	<script>
+		var websocket = null
+		var pluginUUID = null
+		var settingsCache = {}
+		var state = 0
+		const contextCache = []
+
+		const obs = new OBSWebSocket()
+		obs.on('error', err => {
+			console.error('socket error:', err)
+		})
+		obs.on('ConnectionClosed', () => {
+			console.log('connection closed')
+			obsreplayAction.ShowAlert(obsreplayAction.context)
+			if (state == 1)
+				obsreplayAction.onOBSReplayStopped()
+			setTimeout(obsreplayAction.tryOBS.bind(obsreplayAction), 1000 * 5)
+		})
+		var DestinationEnum = Object.freeze({ "HARDWARE_AND_SOFTWARE": 0, "HARDWARE_ONLY": 1, "SOFTWARE_ONLY": 2 })
+		//obs.on('ReplayStarting', () => console.log('ReplayStarting'))
+		//obs.on('ReplayStarted', () => console.log('ReplayStarted'))
+		function getTimestamp() {
+			return Math.floor(new Date().valueOf())
+		}
+		var obsreplayAction = {
+			keyDownTime: 0,
+
+			onKeyDown: function (action, context, settings, coordinates, userDesiredState) {
+				console.log('onKeyDown', action, context, settings, coordinates, userDesiredState)
+				this.keyDownTime = getTimestamp()
+			},
+			onKeyUp: function (action, context, settings, coordinates, userDesiredState) {
+				console.log('onKeyUp', action, context, settings, coordinates, userDesiredState)
+				let timeNow = getTimestamp()
+				let pressTime = timeNow - this.keyDownTime
+
+				console.log('pressTime', pressTime)
+
+				this.SetState(context, state)
+				this.SetTitle(context, '')
+
+				if (pressTime < 800) { // Short Press
+					obs
+						.send('SaveReplayBuffer')
+						.then(() => this.onOBSReplayStarted())
+						.then(() => this.ShowOk(context))
+						.catch(() => this.onOBSReplayStopped())
+				} else { // Long Press
+					if (state == 0)
+						obs.send('StartReplayBuffer')
+					else
+						obs.send('StopReplayBuffer')
+				}
+			},
+
+			onOBSReplayStarted: function () {
+				state = 1
+				this.SetState(this.context, state)
+			},
+			onOBSReplayStopped: function () {
+				state = 0
+				this.SetState(this.context, state)
+			},
+
+			tryOBS: function () {
+				if (obs._connected == false)
+					obs.connect({ address: 'localhost:4444', password: '123' })
+					.catch((err) => {
+						console.log('CONNECTION CATCH')
+					})
+				
+			},
+
+			onWillAppear: function (action, context, settings, coordinates) {
+				console.log('onWillAppear', action, context, settings, coordinates)
+				this.context = context
+				
+				this.tryOBS()
+
+				this.SetState(context, state)
+				this.SetTitle(context, '')
+
+				obs.on('ReplayStarted', this.onOBSReplayStarted.bind(this))
+				obs.on('ReplayStopped', this.onOBSReplayStopped.bind(this))
+			},
+
+			SetTitle: function (context, title) {
+				var json = {
+					"event": "setTitle",
+					"context": context,
+					"payload": {
+						"title": title,
+						"target": DestinationEnum.HARDWARE_AND_SOFTWARE
+					}
+				}
+
+				websocket.send(JSON.stringify(json))
+			},
+			ShowOk: function (context) {
+				var json = {
+					"event": "showOk",
+					"context": context
+				}
+
+				websocket.send(JSON.stringify(json))
+			},
+			ShowAlert: function (context) {
+				var json = {
+					"event": "showAlert",
+					"context": context
+				}
+
+				websocket.send(JSON.stringify(json))
+			},
+			SetState: function (context, state) {
+				var json = {
+					"event": "setState",
+					"context": context,
+					"payload": {
+						"state": 1 - Number(state === 0),
+					}
+				}
+
+				websocket.send(JSON.stringify(json))
+			},
+			SetSettings: function (context, settings) {
+				var json = {
+					"event": "setSettings",
+					"context": context,
+					"payload": settings
+				}
+
+				websocket.send(JSON.stringify(json))
+			},
+			SendToPropertyInspector: function (context, payload) {
+				var json = {
+					action: obsreplayAction.type,
+					event: "sendToPropertyInspector",
+					context: context,
+					payload: payload
+				}
+
+				websocket.send(JSON.stringify(json))
+			},
+		}
+
+		function connectSocket(inPort, inPluginUUID, inRegisterEvent, inInfo) {
+			pluginUUID = inPluginUUID
+
+			// Open the web socket
+			websocket = new WebSocket("ws://localhost:" + inPort)
+
+			function registerPlugin(inPluginUUID) {
+				var json = {
+					"event": inRegisterEvent,
+					"uuid": inPluginUUID
+				}
+
+				websocket.send(JSON.stringify(json))
+			}
+
+			websocket.onopen = function () {
+				registerPlugin(pluginUUID)
+			}
+
+			websocket.onmessage = function (evt) {
+				// Received message from Stream Deck
+				var jsonObj = JSON.parse(evt.data)
+				var event = jsonObj['event']
+				var action = jsonObj['action']
+				var context = jsonObj['context']
+				var jsonPayload = jsonObj['payload'] || {}
+				console.log(action)
+				if (event == "keyDown") {
+					var settings = jsonPayload['settings']
+					var coordinates = jsonPayload['coordinates']
+					var userDesiredState = jsonPayload['userDesiredState']
+					obsreplayAction.onKeyDown(action, context, settings, coordinates, userDesiredState)
+				}
+				else if (event == "keyUp") {
+					var settings = jsonPayload['settings']
+					var coordinates = jsonPayload['coordinates']
+					var userDesiredState = jsonPayload['userDesiredState']
+					obsreplayAction.onKeyUp(action, context, settings, coordinates, userDesiredState)
+				}
+				else if (event == "willAppear") {
+					var settings = jsonPayload['settings']
+					var coordinates = jsonPayload['coordinates']
+					obsreplayAction.onWillAppear(action, context, settings, coordinates)
+				}
+				else if (event == "sendToPlugin") {
+					if (jsonPayload.hasOwnProperty('setPressAction')) {
+
+						var setPressAction = jsonPayload.setPressAction
+						obsreplayAction.SetSettings(context, { "pressAction": setPressAction })
+						
+						loadImageAsDataUri(`${setPressAction}.png`, function (imgUrl) {
+							var json = {
+								"event": "setImage",
+								"context": context,
+								"payload": {
+									image: imgUrl || "",
+									target: DestinationEnum.HARDWARE_AND_SOFTWARE
+								}
+							}
+							websocket.send(JSON.stringify(json))
+						})
+
+					}
+				}
+			};
+
+			websocket.onclose = function () {
+				// Websocket is closed
+			};
+		};
+
+
+		function loadImageAsDataUri(url, callback) {
+			var image = new Image()
+
+			image.onload = function () {
+				var canvas = document.createElement("canvas")
+
+				canvas.width = this.naturalWidth
+				canvas.height = this.naturalHeight
+
+				var ctx = canvas.getContext("2d")
+				ctx.drawImage(this, 0, 0)
+				callback(canvas.toDataURL("image/png"))
+			}
+
+			image.src = url
+		}
+
+	</script>
+
+</body>
+
+</html>
